@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>중3 과학 - 호르몬과 항상성 진단 퀴즈</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    body { font-family: 'Pretendard', sans-serif; }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800 flex flex-col justify-between">
+
+  <!-- 로딩 스피너 오버레이 -->
+  <div id="loadingOverlay" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex flex-col items-center justify-center text-white">
+    <div class="w-12 h-12 border-4 border-indigo-400 border-t-transparent rounded-full animate-spin mb-4"></div>
+    <p id="loadingText" class="font-semibold text-lg">구글 시트와 통신 중입니다...</p>
+  </div>
+
+  <div class="max-w-2xl mx-auto w-full p-4 sm:p-6 my-auto">
+    
+    <!-- 1. 학생 로그인 / 시작 화면 -->
+    <div id="authScreen" class="bg-white rounded-2xl shadow-xl p-6 sm:p-8 border border-slate-100">
+      <div class="text-center mb-6">
+        <span class="inline-block px-3 py-1 bg-indigo-100 text-indigo-700 text-xs font-bold rounded-full mb-2">2015 개정 교육과정 중3 과학</span>
+        <h1 class="text-2xl sm:text-3xl font-extrabold text-slate-900">호르몬과 항상성 진단 평가</h1>
+        <p class="text-slate-500 text-sm mt-1">아이디와 비밀번호를 입력한 후 시작해 주세요.</p>
+      </div>
+
+      <form id="authForm" onsubmit="event.preventDefault();" class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1">학생 아이디 (학번/이름 등)</label>
+          <input type="text" id="studentId" required placeholder="예: 30101홍길동" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-600 mb-1">비밀번호 (결과 재조회용 4자리 이상)</label>
+          <input type="password" id="studentPassword" required placeholder="비밀번호 입력" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+          <button type="button" onclick="startQuiz()" class="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg shadow-indigo-200 transition">
+            퀴즈 시작하기
+          </button>
+          <button type="button" onclick="checkPreviousResult()" class="w-full py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition">
+            이전 제출 결과 확인
+          </button>
+        </div>
+      </form>
+    </div>
+
+    <!-- 2. 퀴즈 진행 화면 -->
+    <div id="quizScreen" class="hidden bg-white rounded-2xl shadow-xl p-6 sm:p-8 border border-slate-100">
+      <div class="flex justify-between items-center mb-6">
+        <span id="questionProgress" class="text-xs font-bold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">문제 1 / 5</span>
+        <span id="userTag" class="text-xs text-slate-500 font-medium"></span>
+      </div>
+
+      <div class="mb-6">
+        <h2 id="questionText" class="text-lg font-bold text-slate-800 leading-snug"></h2>
+      </div>
+
+      <div id="optionsContainer" class="space-y-3 mb-8"></div>
+
+      <div class="flex justify-between">
+        <button id="prevBtn" onclick="prevQuestion()" class="px-5 py-2.5 bg-slate-100 text-slate-600 font-semibold rounded-xl hover:bg-slate-200 transition hidden">이전</button>
+        <button id="nextBtn" onclick="nextQuestion()" class="ml-auto px-6 py-2.5 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition">다음</button>
+      </div>
+    </div>
+
+    <!-- 3. 결과 화면 (제출 완료 / 학생 재조회) -->
+    <div id="resultScreen" class="hidden bg-white rounded-2xl shadow-xl p-6 sm:p-8 border border-slate-100">
+      <div class="text-center mb-8">
+        <div id="levelBadge" class="inline-block px-4 py-1.5 rounded-full text-sm font-bold mb-3"></div>
+        <h2 class="text-3xl font-black text-slate-900 mb-1"><span id="scoreText">0</span>점 / 100점</h2>
+        <p id="levelDesc" class="text-slate-600 text-sm max-w-md mx-auto"></p>
+      </div>
+
+      <h3 class="text-base font-bold text-slate-800 mb-4 pb-2 border-b border-slate-100">문항별 정답 및 해설</h3>
+      <div id="reviewContainer" class="space-y-4 mb-8 max-h-[400px] overflow-y-auto pr-2"></div>
+
+      <button onclick="resetApp()" class="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl transition">
+        처음으로 돌아가기
+      </button>
+    </div>
+
+    <!-- 4. 선생님(관리자) 화면 -->
+    <div id="adminScreen" class="hidden bg-white rounded-2xl shadow-xl p-6 sm:p-8 border border-slate-100">
+      <div class="flex justify-between items-center mb-6 pb-4 border-b border-slate-100">
+        <div>
+          <h2 class="text-xl font-bold text-slate-900">선생님 관리자 페이지</h2>
+          <p class="text-xs text-slate-500">구글 시트에 저장된 전체 학생 응답 목록</p>
+        </div>
+        <button onclick="resetApp()" class="text-xs bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-lg text-slate-600 font-semibold">로그아웃</button>
+      </div>
+
+      <div class="overflow-x-auto mb-6">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-slate-50 text-slate-500 text-xs">
+            <tr>
+              <th class="p-3 rounded-l-lg">제출일시</th>
+              <th class="p-3">학생 ID</th>
+              <th class="p-3">점수</th>
+              <th class="p-3 rounded-r-lg">이해도 수준</th>
+            </tr>
+          </thead>
+          <tbody id="adminTableBody" class="divide-y divide-slate-100"></tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- 화면 하단 선생님 로그인 버튼 -->
+  <footer class="py-4 text-center text-xs text-slate-400">
+    <button onclick="openAdminModal()" class="hover:underline hover:text-slate-600">선생님(관리자) 로그인</button>
+  </footer>
+
+  <script>
+    // ⚠️ [필수] 구글 앱스 스크립트 배포 후 발급받은 URL을 아래에 넣어주세요.
+    const GAS_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwaIjQ4pfhXR8upBUCpGnkT6Yv0TS06bxDrLE1fATkerHPZCQ4Ter5f-OxnCI1pv_zI/exec";
+
+    // 퀴즈 문항 데이터 (용어 정제: '글루코스' -> '포도당', 외분비샘 제외, 화살표 문자 사용)
+    const quizData = [
+      {
+        id: 1,
+        question: "1. 내분비샘과 호르몬의 특징에 대한 설명으로 올바른 것은?",
+        options: [
+          "호르몬은 관을 통해 특정 세포로 이동한다.",
+          "호르몬은 혈관(혈액)으로 직접 분비되어 온몸으로 운반된다.",
+          "호르몬은 신경에 비해 신호 전달 속도가 매우 빠르고 작용 범위가 좁다.",
+          "호르몬 분비량이 조금만 변해도 체온은 영향을 받지 않고 일정하다."
+        ],
+        answer: 1,
+        explanation: "호르몬은 별도의 분비관 없이 혈액(혈관)으로 직접 분비되어 온몸을 순환하다가 표적 기관/세포에 작용합니다."
+      },
+      {
+        id: 2,
+        question: "2. 식사 후 혈당량이 높을 때, 이자에서 분비되어 포도당을 글리코젠으로 합성하는 호르몬은?",
+        options: [
+          "인슐린 (포도당 → 글리코젠)",
+          "글루카곤 (글리코젠 → 포도당)",
+          "티록신 (세포 호흡 촉진)",
+          "생장 호르몬 (몸의 성장 촉진)"
+        ],
+        answer: 0,
+        explanation: "식사 후 증가한 혈당량을 낮추기 위해 이자에서 '인슐린'이 분비되어 포도당을 글리코젠으로 합성합니다."
+      },
+      {
+        id: 3,
+        question: "3. 운동을 하거나 공복 상태일 때 혈당량을 다시 올려주기 위해 이자에서 분비되는 호르몬 작용은?",
+        options: [
+          "인슐린 분비가 증가하여 포도당을 흡수한다.",
+          "글루카곤 분비가 증가하여 글리코젠을 포도당으로 분해한다.",
+          "티록신 분비가 감소하여 에너지 소비를 단절한다.",
+          "인슐린과 글루카곤이 동시에 감소하여 혈당을 유지한다."
+        ],
+        answer: 1,
+        explanation: "공복 시 낮아진 혈당량을 높이기 위해 이자에서 '글루카곤'이 분비되어 간에 저장된 글리코젠을 포도당으로 분해해 혈액으로 보냅니다."
+      },
+      {
+        id: 4,
+        question: "4. 추울 때 우리 몸에서 일어나는 체온 조절 작용으로 옳지 않은 것은?",
+        options: [
+          "열 발생량을 늘리기 위해 근육이 떨린다.",
+          "갑상샘에서 티록신 분비가 증가하여 세포 호흡이 촉진된다.",
+          "피부 부근 혈관이 수축하여 열 방출량을 줄인다.",
+          "땀 분비량이 증가하여 체온을 낮춘다."
+        ],
+        answer: 3,
+        explanation: "추울 때는 체온 손실을 줄여야 하므로 땀 분비량을 감소시켜 열 방출을 막습니다. (땀 분비 증가 x)"
+      },
+      {
+        id: 5,
+        question: "5. 무더운 여름철 체온이 올라갔을 때 체온을 낮추기 위한 우리 몸의 반응으로 옳은 것은?",
+        options: [
+          "피부 부근 혈관이 수축하여 혈류량을 줄인다.",
+          "피부 부근 혈관이 확장되고 땀 분비량이 증가하여 열 방출량을 늘린다.",
+          "근육 떨림을 일으켜 열 발생량을 늘린다.",
+          "티록신 분비량이 급격히 증가한다."
+        ],
+        answer: 1,
+        explanation: "더울 때는 피부 부근 혈관이 확장되어 열을 바깥으로 내보내고, 땀 분비가 늘어나 땀이 증발하면서 체온을 낮춥니다."
+      }
+    ];
+
+    let currentQuestion = 0;
+    let userAnswers = Array(quizData.length).fill(null);
+    let currentUser = { id: '', password: '' };
+
+    function showLoading(text) {
+      document.getElementById('loadingText').innerText = text || '처리 중입니다...';
+      document.getElementById('loadingOverlay').classList.remove('hidden');
+    }
+    function hideLoading() {
+      document.getElementById('loadingOverlay').classList.add('hidden');
+    }
+
+    function showScreen(screenId) {
+      ['authScreen', 'quizScreen', 'resultScreen', 'adminScreen'].forEach(id => {
+        document.getElementById(id).classList.add('hidden');
+      });
+      document.getElementById(screenId).classList.remove('hidden');
+    }
+
+    function startQuiz() {
+      const id = document.getElementById('studentId').value.trim();
+      const pwd = document.getElementById('studentPassword').value.trim();
+
+      if (!id || !pwd) {
+        alert('학생 아이디와 비밀번호를 모두 입력해 주세요.');
+        return;
+      }
+
+      currentUser = { id, password: pwd };
+      currentQuestion = 0;
+      userAnswers = Array(quizData.length).fill(null);
+      document.getElementById('userTag').innerText = `학생: ${id}`;
+      showScreen('quizScreen');
+      renderQuestion();
+    }
+
+    async function checkPreviousResult() {
+      const id = document.getElementById('studentId').value.trim();
+      const pwd = document.getElementById('studentPassword').value.trim();
+
+      if (!id || !pwd) {
+        alert('조회할 학생 아이디와 비밀번호를 입력해 주세요.');
+        return;
+      }
+
+      if (GAS_WEB_APP_URL.includes("YOUR_GOOGLE_APPS_SCRIPT")) {
+        alert("Google Apps Script URL이 설정되지 않았습니다. 백엔드 배포 후 URL을 수정해주세요.");
+        return;
+      }
+
+      showLoading('이전 제출 기록 조회 중...');
+      try {
+        const res = await fetch(GAS_WEB_APP_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'login', studentId: id, password: pwd })
+        });
+        const result = await res.json();
+        hideLoading();
+
+        if (result.success) {
+          renderResultView(result.data.score, result.data.level, result.data.answers);
+        } else {
+          alert(result.message);
+        }
+      } catch (err) {
+        hideLoading();
+        alert('서버 통신 실패: ' + err.message);
+      }
+    }
+
+    function renderQuestion() {
+      const q = quizData[currentQuestion];
+      document.getElementById('questionProgress').innerText = `문제 ${currentQuestion + 1} / ${quizData.length}`;
+      document.getElementById('questionText').innerText = q.question;
+
+      const container = document.getElementById('optionsContainer');
+      container.innerHTML = '';
+
+      q.options.forEach((opt, idx) => {
+        const isSelected = userAnswers[currentQuestion] === idx;
+        const btn = document.createElement('button');
+        btn.className = `w-full text-left p-4 rounded-xl border transition flex items-center justify-between ${
+          isSelected 
+            ? 'border-indigo-600 bg-indigo-50 text-indigo-900 font-semibold' 
+            : 'border-slate-200 hover:border-slate-300 text-slate-700 bg-white'
+        }`;
+        btn.onclick = () => selectOption(idx);
+        btn.innerHTML = `<span>${opt}</span>`;
+        container.appendChild(btn);
+      });
+
+      document.getElementById('prevBtn').classList.toggle('hidden', currentQuestion === 0);
+      document.getElementById('nextBtn').innerText = (currentQuestion === quizData.length - 1) ? '최종 제출하기' : '다음';
+    }
+
+    function selectOption(idx) {
+      userAnswers[currentQuestion] = idx;
+      renderQuestion();
+    }
+
+    function prevQuestion() {
+      if (currentQuestion > 0) {
+        currentQuestion--;
+        renderQuestion();
+      }
+    }
+
+    function nextQuestion() {
+      if (userAnswers[currentQuestion] === null) {
+        alert('답안을 선택해 주세요!');
+        return;
+      }
+
+      if (currentQuestion < quizData.length - 1) {
+        currentQuestion++;
+        renderQuestion();
+      } else {
+        submitQuiz();
+      }
+    }
+
+    async function submitQuiz() {
+      let score = 0;
+      userAnswers.forEach((ans, idx) => {
+        if (ans === quizData[idx].answer) score += 20;
+      });
+
+      let level = "낮음";
+      if (score >= 100) level = "높음";
+      else if (score >= 60) level = "보통";
+
+      const submissionData = {
+        action: 'submit',
+        studentId: currentUser.id,
+        password: currentUser.password,
+        score: score,
+        level: level,
+        answers: userAnswers
+      };
+
+      if (!GAS_WEB_APP_URL.includes("YOUR_GOOGLE_APPS_SCRIPT")) {
+        showLoading('구글 시트에 제출 결과 저장 중...');
+        try {
+          await fetch(GAS_WEB_APP_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify(submissionData)
+          });
+        } catch (err) {
+          console.error("저장 오류:", err);
+        }
+        hideLoading();
+      }
+
+      renderResultView(score, level, userAnswers);
+    }
+
+    function renderResultView(score, level, answers) {
+      document.getElementById('scoreText').innerText = score;
+      
+      const badge = document.getElementById('levelBadge');
+      const desc = document.getElementById('levelDesc');
+
+      if (level === '높음') {
+        badge.className = "inline-block px-4 py-1.5 rounded-full text-sm font-bold bg-emerald-100 text-emerald-800 mb-3";
+        badge.innerText = "이해도: 높음 (완벽합니다!)";
+        desc.innerText = "호르몬과 항상성 조절 과정을 완벽하게 마스터하셨습니다!";
+      } else if (level === '보통') {
+        badge.className = "inline-block px-4 py-1.5 rounded-full text-sm font-bold bg-amber-100 text-amber-800 mb-3";
+        badge.innerText = "이해도: 보통 (잘하고 있어요)";
+        desc.innerText = "개념을 잘 이해하고 있습니다. 틀린 문제의 해설을 복습해 완전히 내 것으로 만들어 보세요.";
+      } else {
+        badge.className = "inline-block px-4 py-1.5 rounded-full text-sm font-bold bg-rose-100 text-rose-800 mb-3";
+        badge.innerText = "이해도: 낮음 (복습 필요)";
+        desc.innerText = "개념 복습이 필요합니다! 교과서의 호르몬 종류와 항상성 유지 원리를 천천히 읽어보세요.";
+      }
+
+      const reviewContainer = document.getElementById('reviewContainer');
+      reviewContainer.innerHTML = '';
+
+      quizData.forEach((q, idx) => {
+        const userAns = answers[idx];
+        const isCorrect = userAns === q.answer;
+
+        const card = document.createElement('div');
+        card.className = `p-4 rounded-xl border ${isCorrect ? 'border-slate-200 bg-slate-50' : 'border-rose-200 bg-rose-50/50'}`;
+        card.innerHTML = `
+          <div class="flex items-start justify-between mb-2">
+            <span class="font-bold text-sm ${isCorrect ? 'text-slate-800' : 'text-rose-700'}">${q.question}</span>
+            <span class="text-xs font-bold px-2 py-0.5 rounded ${isCorrect ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}">
+              ${isCorrect ? '정답' : '오답'}
+            </span>
+          </div>
+          <p class="text-xs text-slate-600 mb-1">내 선택: <span class="font-semibold">${userAns !== null ? q.options[userAns] : '미선택'}</span></p>
+          ${!isCorrect ? `<p class="text-xs text-emerald-700 font-semibold mb-2">정답: ${q.options[q.answer]}</p>` : ''}
+          <div class="text-xs text-slate-500 bg-white p-2.5 rounded-lg border border-slate-100 mt-2">
+            💡 <strong>해설:</strong> ${q.explanation}
+          </div>
+        `;
+        reviewContainer.appendChild(card);
+      });
+
+      showScreen('resultScreen');
+    }
+
+    async function openAdminModal() {
+      const pwd = prompt('선생님 관리자 비밀번호를 입력하세요:');
+      if (!pwd) return;
+
+      if (GAS_WEB_APP_URL.includes("YOUR_GOOGLE_APPS_SCRIPT")) {
+        alert("Google Apps Script URL이 설정되지 않았습니다. 배포 후 URL을 연결하세요.");
+        return;
+      }
+
+      showLoading('관리자 인증 중...');
+      try {
+        const res = await fetch(GAS_WEB_APP_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({ action: 'adminLogin', password: pwd })
+        });
+        const result = await res.json();
+        hideLoading();
+
+        if (result.success) {
+          renderAdminTable(result.students);
+          showScreen('adminScreen');
+        } else {
+          alert(result.message);
+        }
+      } catch (err) {
+        hideLoading();
+        alert('인증 오류: ' + err.message);
+      }
+    }
+
+    function renderAdminTable(students) {
+      const tbody = document.getElementById('adminTableBody');
+      tbody.innerHTML = '';
+
+      if (students.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="p-4 text-center text-slate-400">제출된 학생 데이터가 없습니다.</td></tr>`;
+        return;
+      }
+
+      students.forEach(st => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="p-3 text-xs text-slate-500">${st.timestamp}</td>
+          <td class="p-3 font-semibold text-slate-800">${st.studentId}</td>
+          <td class="p-3 font-bold text-indigo-600">${st.score}점</td>
+          <td class="p-3">
+            <span class="text-xs font-bold px-2 py-1 rounded-full ${
+              st.level === '높음' ? 'bg-emerald-100 text-emerald-700' :
+              st.level === '보통' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'
+            }">${st.level}</span>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function resetApp() {
+      document.getElementById('studentId').value = '';
+      document.getElementById('studentPassword').value = '';
+      showScreen('authScreen');
+    }
+  </script>
+</body>
+</html>
